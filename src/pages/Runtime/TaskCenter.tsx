@@ -1,0 +1,26 @@
+import { Check, Inbox, MessageSquareText, ShieldCheck, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import StatusBadge from '../../components/StatusBadge'
+import { useWorkspace } from '../../state/WorkspaceContext'
+import { usePlatform } from '../../state/PlatformContext'
+import type { UserRole } from '../../types/workspace'
+
+const roleNames: Record<UserRole, string> = { applicant: '申请人', department_manager: '部门经理', finance: '财务审批人' }
+
+export default function TaskCenter() {
+  const { workspace, decideTask } = useWorkspace()
+  const { currentUser } = usePlatform()
+  const businessRoles = (currentUser?.roles.filter((role): role is UserRole => role !== 'administrator') ?? [])
+  const visibleTasks = useMemo(() => workspace.tasks.filter((task) => businessRoles.includes(task.role) && task.status === 'pending'), [workspace.tasks, businessRoles.join('|')])
+  const [selectedId, setSelectedId] = useState('')
+  const [comment, setComment] = useState('信息完整，同意本次采购申请。')
+  const selectedTask = visibleTasks.find((task) => task.id === selectedId) ?? visibleTasks[0]
+  const request = workspace.requests.find((item) => item.id === selectedTask?.requestId)
+  const decide = (decision: 'approve' | 'reject') => { if (selectedTask) { decideTask(selectedTask.id, decision, comment); setSelectedId(''); setComment('信息完整，同意本次采购申请。') } }
+
+  return <div className="page-shell max-w-[1500px]"><div className="mb-6"><div className="eyebrow">Human Tasks</div><h2 className="page-title mt-2">我的待办</h2><p className="page-subtitle">账号身份：{businessRoles.map((role) => roleNames[role]).join('、') || '管理员'}。待办会根据账号拥有的流程角色自动路由。</p></div>
+    {visibleTasks.length ? <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]"><section className="app-card overflow-hidden"><div className="panel-header"><div><h3 className="section-title">待处理任务</h3><p className="mt-1 text-xs text-secondary-500">{visibleTasks.length} 条待办</p></div><span className="badge-red">需要处理</span></div><div className="space-y-2 p-3">{visibleTasks.map((task) => { const item = workspace.requests.find((requestItem) => requestItem.id === task.requestId); return item ? <button key={task.id} onClick={() => setSelectedId(task.id)} className={`w-full rounded-xl border p-4 text-left transition ${selectedTask?.id === task.id ? 'border-primary-300 bg-primary-50' : 'border-secondary-100 hover:bg-secondary-50'}`}><div className="flex items-center gap-2"><span className="badge-blue">{task.nodeName}</span><span className="ml-auto text-[11px] text-secondary-400">{new Date(task.createdAt).toLocaleDateString()}</span></div><h4 className="mt-3 text-sm font-semibold text-secondary-900">{item.title}</h4><div className="mt-2 flex items-center text-xs text-secondary-500"><span>{item.requestNo}</span><span className="mx-2">·</span><strong className="text-secondary-900">¥ {item.amount.toLocaleString()}</strong></div></button> : null })}</div></section>
+      {request && selectedTask && <section className="app-card overflow-hidden"><div className="panel-header"><div><div className="flex items-center gap-2"><ShieldCheck size={18} className="text-primary-600" /><h3 className="section-title">审批处理</h3></div><p className="mt-1 text-xs text-secondary-500">任务节点：{selectedTask.nodeName}</p></div><StatusBadge status={request.status} /></div><div className="grid gap-4 border-b border-secondary-100 p-5 sm:grid-cols-2 xl:grid-cols-3">{[['申请标题', request.title], ['申请单号', request.requestNo], ['采购类别', request.category], ['申请金额', `¥ ${request.amount.toLocaleString()}`], ['申请人', `${request.applicant} · ${request.department}`], ['意向供应商', request.supplier || '未填写']].map(([label, value]) => <div key={label} className="rounded-xl bg-secondary-50 p-3"><div className="text-[11px] text-secondary-400">{label}</div><div className="mt-1 text-sm font-medium text-secondary-800">{value}</div></div>)}</div><div className="p-5"><h4 className="text-sm font-medium text-secondary-900">采购事由</h4><p className="mt-2 rounded-xl border border-secondary-200 bg-secondary-50 p-4 text-sm leading-6 text-secondary-600">{request.reason}</p>{request.amount > 10000 && selectedTask.role === 'department_manager' && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800"><strong>流程提示：</strong>该申请金额超过 ¥10,000，部门经理同意后将自动进入财务审批。</div>}<label className="mt-5 block"><span className="field-label flex items-center gap-1.5"><MessageSquareText size={14} />审批意见</span><textarea className="field min-h-24" value={comment} onChange={(event) => setComment(event.target.value)} /></label><div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button className="btn-danger" onClick={() => decide('reject')}><X size={16} />驳回申请</button><button className="btn-primary" onClick={() => decide('approve')}><Check size={16} />同意申请</button></div></div></section>}
+    </div> : <div className="empty-state app-card min-h-[380px]"><span className="grid h-14 w-14 place-items-center rounded-2xl bg-secondary-100 text-secondary-400"><Inbox size={27} /></span><h3 className="mt-4 font-semibold text-secondary-900">当前账号暂无待办</h3><p className="mt-2 max-w-md text-sm leading-6 text-secondary-500">待办只会展示给拥有“部门经理”或“财务审批人”身份的账号。管理员可在用户管理中调整账号身份。</p></div>}
+  </div>
+}
